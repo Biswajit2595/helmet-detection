@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Helmet Detection</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        font-family: Arial, sans-serif;
+      }
+      body {
+        background-color: #f5f5f5;
+      }
+      nav {
+        background-color: #06954e;
+        padding: 20px;
+        display: flex;
+        justify-content: space between;
+        align-items: center;
+      }
+      nav h1 {
+        color: #f1f1b8;
+        font-size: 24px;
+      }
+      nav button {
+        background-color: #000;
+        color: #fff;
+        border: none;
+        padding: 10px 20px;
+        margin: 10px;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+      nav button:hover {
+        background-color: #d3d307;
+        font-weight: 500;
+      }
+      .container {
+        background-color: transparent;
+        width: 100vw;
+        height: 90vh;
+        display: flex;
+        padding: 20px;
+        position: relative;
+        background-image: url(https://www.bajajallianz.com/blog/wp-content/uploads/2019/02/Helmet_Safety-800x503.jpg);
+        background-size: cover;
+      }
+      .left {
+        width: 100%;
+        margin: 10px;
+        background-color: rgba(255, 255, 255, 0.2);
+        border-radius: 20px;
+        padding: 20px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+      }
+      .left p {
+        font-size: 18px;
+        color: #d9e1dc;
+        font-weight: bolder;
+        text-align: center;
+        margin-top: 20px;
+      }
+      .left img {
+        width: 70%;
+      }
+      .right {
+        width: 100%;
+        height: 100%;
+        padding: 20px;
+        margin: 10px;
+        background-color: rgba(255, 255, 255, 0.2);
+        border-radius: 20px;
+      }
+      .right .webcam-container {
+        padding: 20px;
+      }
+      .right .webcam-container div {
+        padding: 0;
+        box-shadow: rgba(50, 50, 93, 0.25) 0px 6px 12px -2px,
+          rgba(0, 0, 0, 0.3) 0px 3px 7px -3px;
+      }
+      #start {
+        height: 50px;
+        width: 100px;
+        background-color: #000;
+        color: #fff;
+        font-size: 18px;
+        font-weight: 700;
+        margin: 20px 0;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+      }
+      #start:hover {
+        background-color: #be0808;
+      }
+      #label-container {
+        margin-top: 20px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: center;
+      }
+      #label-container div {
+        padding: 10px 15px;
+        color: beige;
+        background-color: #06954e;
+        margin-bottom: 10px;
+        text-align: center;
+        border-radius: 10px;
+        font-family: "Courier New", Courier, monospace;
+      }
+      .alert {
+        position: absolute;
+        top: 50px;
+        right: 10px;
+        /* background-color: #be0808; */
+        color: #fff;
+        padding: 20px;
+        border-radius: 5px;
+        display: none;
+        font-weight: bold;
+        text-align: center;
+        z-index: 2;
+      }
+      .webcam-container {
+        display: flex;
+        justify-content: center;
+      }
+
+      @media (max-width: 768px) {
+        .container {
+          flex-direction: column;
+        }
+        .left,
+        .right {
+          width: 100%;
+          padding: 5px;
+          border-radius: 15px;
+          box-shadow: none;
+        }
+
+        .left p {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <nav>
+        <h1>Helmet Detection System</h1>
+    </nav>
+    <div class="container">
+        <div class="left">
+            <button type="button" id="start" onclick="init()">Start</button>
+            <p>Wearing a helmet is crucial for your safety while riding. It protects your head and can save your life in case of an accident. Always remember to wear a helmet when you're on the road.</p>
+        </div>
+        <div class="right">
+            <div class="webcam-container" id="webcam-container"></div>
+            <div id="label-container"></div>
+        </div>
+    </div>
+    <div class="alert" id="alert" style="display: none;">
+        <span id="alert-text"></span>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    <script type="text/javascript">
+        let model, webcam, labelContainer, maxPredictions;
+        let alertDisplayed = false; // Flag to track if alert is displayed
+
+        async function init() {
+            const modelURL = "https://teachablemachine.withgoogle.com/models/an_UNUtxw/model.json";
+            const metadataURL = "https://teachablemachine.withgoogle.com/models/an_UNUtxw/metadata.json";
+            model = await tmImage.load(modelURL, metadataURL);
+            maxPredictions = model.getTotalClasses();
+            const flip = true;
+            webcam = new tmImage.Webcam(200, 200, flip);
+            await webcam.setup();
+            await webcam.play();
+            window.requestAnimationFrame(loop);
+            document.getElementById("webcam-container").appendChild(webcam.canvas);
+            labelContainer = document.getElementById("label-container");
+            for (let i = 0; i < maxPredictions; i++) {
+                labelContainer.appendChild(document.createElement("div"));
+            }
+        }
+
+        async function loop() {
+            webcam.update();
+            await predict();
+            window.requestAnimationFrame(loop);
+        }
+
+        async function predict() {
+            const prediction = await model.predict(webcam.canvas);
+            let helmetOn = false;
+
+            for (let i = 0; i < maxPredictions; i++) {
+                const classPrediction = prediction[i].className + ": " + prediction[i].probability.toFixed(2);
+
+                labelContainer.childNodes[i].innerHTML = classPrediction;
+                // console.log(classPrediction); // Add this line for debugging
+                
+                if (prediction[i].className === "Helmet On " && prediction[i].probability == 1) {
+                    helmetOn = true;
+                }
+            }
+
+            if (helmetOn) {
+                showMessage("green", "Helmet Detected");
+            } else{
+                showMessage("red", "Helmet is missing! Please wear a helmet");
+            }
+        }
+
+        function showMessage(alertColor, message) {
+            const alertDiv = document.getElementById("alert");
+            const alertTextElement = document.getElementById("alert-text");
+
+            alertDiv.style.backgroundColor = alertColor;
+            alertTextElement.innerText = message;
+            alertDiv.style.display = 'block';
+            alertDisplayed = true;
+        }
+    </script>
+</body>
+</html>
